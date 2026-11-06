@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PostureIt 3D circuit</title>
+<style>
+html,body{margin:0;height:100%;background:#12141a;color:#ecebe4;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.box{
+  background:linear-gradient(145deg,rgba(255,255,255,.14),rgba(255,255,255,.04));
+  border:1px solid rgba(255,255,255,.2);
+  border-radius:16px;padding:10px 14px;font-size:13px;line-height:1.45;
+  -webkit-backdrop-filter:blur(18px) saturate(160%);
+  backdrop-filter:blur(18px) saturate(160%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 10px 30px rgba(0,0,0,.35);
+}
+.pill,.lt{backdrop-filter:blur(6px)}
+.pill{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.22)}
+.top{position:fixed;top:10px;left:10px;right:10px;display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;pointer-events:none}
+.top .box{pointer-events:auto}
+.ttl{font-size:15px;font-weight:600}
+.sm{color:#a5a39a;font-size:12px}
+.dock{position:fixed;left:10px;right:10px;bottom:10px;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.dock .box{pointer-events:auto}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.lt{width:16px;height:16px;border-radius:50%;opacity:.18;border:1px solid #444}
+.pill{display:inline-block;padding:2px 10px;border-radius:999px;border:1px solid #4a5063;font-size:13px}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:#c9e8a0}
+input[type=range]{flex:1;min-width:140px}
+button{
+  position:relative;
+  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 16px;border-radius:999px;
+  font:500 13px/1 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color:#f4f3ee;letter-spacing:.01em;
+  background:linear-gradient(145deg,rgba(255,255,255,.22),rgba(255,255,255,.05));
+  border:1px solid rgba(255,255,255,.28);
+  -webkit-backdrop-filter:blur(14px) saturate(170%);
+  backdrop-filter:blur(14px) saturate(170%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 6px 18px rgba(0,0,0,.28);
+  cursor:pointer;
+  transition:transform .18s ease,background .25s ease,border-color .25s ease,box-shadow .25s ease;
+}
+button:hover{
+  background:linear-gradient(145deg,rgba(255,255,255,.3),rgba(255,255,255,.1));
+  border-color:rgba(255,255,255,.42);
+  transform:translateY(-1px);
+}
+button:active{transform:translateY(0) scale(.97)}
+button:focus-visible{outline:2px solid rgba(160,200,255,.9);outline-offset:3px}
+button.on{
+  background:linear-gradient(145deg,rgba(90,150,255,.55),rgba(60,100,210,.28));
+  border-color:rgba(150,190,255,.7);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 0 0 3px rgba(90,150,255,.18),0 8px 22px rgba(40,90,200,.35);
+}
+button.on::before{
+  content:"";width:6px;height:6px;border-radius:50%;background:#9fd0ff;box-shadow:0 0 8px #9fd0ff;
+}
+input[type=range]{accent-color:#8fbaff}
+#info{max-width:560px}
+#err{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;text-align:center;font-size:15px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="err">The 3D view could not load. Check your internet connection (Three.js loads from a CDN) and that WebGL is enabled, then reload.</div>
+
+<div class="top">
+  <div class="box">
+    <div class="ttl">PostureIt: 3D circuit</div>
+    <div class="sm">Drag to rotate, pinch or scroll to zoom, tap a part</div>
+  </div>
+  <div class="box">
+    <div class="row">
+      <div class="lt" id="hg" style="background:#639922"></div>
+      <div class="lt" id="hy" style="background:#EF9F27"></div>
+      <div class="lt" id="hr" style="background:#E24B4A"></div>
+      <span class="pill" id="hstate">Good</span>
+    </div>
+    <div class="sm" style="margin-top:4px">Tilt <b id="hang">0.0</b>° &nbsp; in state <b id="hsince">0.0</b> s</div>
+    <div class="mono" id="hser">0.0,G</div>
+  </div>
+</div>
+
+<div class="dock">
+  <div class="box" id="info"><b id="iname">Tap a part</b><div class="sm" id="itext" style="color:#cfcdc4">Every part in the circuit can be tapped to see what it does and where it connects.</div></div>
+  <div class="box">
+    <div class="row">
+      <label for="tilt" style="font-size:13px">Forward tilt</label>
+      <input id="tilt" type="range" min="0" max="50" value="0">
+      <b id="tiltv" style="min-width:34px;text-align:right">0°</b>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="bDemo">Auto demo</button>
+      <button id="bLabels" class="on">Labels</button>
+      <button id="bWires" class="on">Wires</button>
+      <button id="bExplode">Explode</button>
+      <button id="bSpin">Spin</button>
+      <button id="bReset">Reset view</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+if(typeof THREE==='undefined'||!THREE.OrbitControls){document.getElementById('err').style.display='flex';return;}
+const $=id=>document.getElementById(id);
+const canvas=$('c');
+let renderer;
+try{renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true});}catch(e){$('err').style.display='flex';return;}
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x12141a);
+const camera=new THREE.PerspectiveCamera(45,1,0.1,300);
+const controls=new THREE.OrbitControls(camera,canvas);
+controls.enableDamping=true;
+controls.maxPolarAngle=Math.PI*0.49;
+controls.minDistance=8;
+controls.maxDistance=110;
+controls.target.set(0,0,0);
+
+scene.add(new THREE.HemisphereLight(0xffffff,0x2a2f3a,0.85));
+const sun=new THREE.DirectionalLight(0xffffff,0.9);
+sun.position.set(12,32,18);
+sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.left=-26;sun.shadow.camera.right=26;sun.shadow.camera.top=26;sun.shadow.camera.bottom=-26;
+sun.shadow.camera.near=1;sun.shadow.camera.far=80;
+scene.add(sun);
+
+const V=(x,y,z)=>new THREE.Vector3(x,y,z);
+const M=(c,o)=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:0.55,metalness:0.1},o||{}));
+function mesh(geo,m,x,y,z,p){const o=new THREE.Mesh(geo,m);o.position.set(x||0,y||0,z||0);o.castShadow=true;o.receiveShadow=true;if(p)p.add(o);return o;}
+const B=(w,h,d,m,x,y,z,p)=>mesh(new THREE.BoxGeometry(w,h,d),m,x,y,z,p);
+const C=(r,h,m,x,y,z,p,seg)=>mesh(new THREE.CylinderGeometry(r,r,h,seg||20),m,x,y,z,p);
+const S=(r,m,x,y,z,p)=>mesh(new THREE.SphereGeometry(r,16,12),m,x,y,z,p);
+
+const SILVER=M(0xc4c8ce,{metalness:0.5,roughness:0.35});
+const GOLD=M(0xd9b44a,{metalness:0.6,roughness:0.35});
+const BLACK=M(0x15171b,{roughness:0.6});
+
+const base=B(38,0.6,25,M(0x262b35,{roughness:0.9}),0,-0.3,-1,scene);
+const grid=new THREE.GridHelper(70,70,0x2a2f3a,0x1c2028);
+grid.position.y=-0.61;scene.add(grid);
+
+const parts=[];const labels=[];
+function part(name,info,x,y,z,r,ex){
+  const g=new THREE.Group();
+  g.position.set(x,y,z);
+  g.userData={name:name,info:info,baseY:y,r:r||2,ex:ex||0};
+  scene.add(g);parts.push(g);return g;
+}
+function label(text,parent,x,y,z,color,w){
+  const cv=document.createElement('canvas');cv.width=320;cv.height=80;
+  const c=cv.getContext('2d');
+  c.fillStyle='rgba(15,17,22,0.9)';
+  c.beginPath();
+  if(c.roundRect){c.roundRect(4,8,312,64,14);}else{c.rect(4,8,312,64);}
+  c.fill();
+  c.strokeStyle=color||'#7c8494';c.lineWidth=3;c.stroke();
+  c.fillStyle='#f1efe8';c.font='600 30px system-ui,sans-serif';c.textAlign='center';c.textBaseline='middle';
+  c.fillText(text,160,41);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),depthTest:false,transparent:true}));
+  const ww=w||4.2;
+  sp.scale.set(ww,ww/4,1);sp.position.set(x,y,z);sp.renderOrder=10;
+  parent.add(sp);labels.push(sp);return sp;
+}
+const A=(g,x,y,z)=>()=>g.localToWorld(V(x,y,z));
+
+/* ---------- Arduino Uno ---------- */
+const ard=part('Arduino Uno R3','The brain. It reads the MPU6050 over I2C (A4 and A5), runs the posture logic, drives the three LEDs on D4, D5 and D6, switches the vibration motor through a transistor on D7, and talks to the HC-05 on D10 and D11.',-10,0,-4,6.2,4.5);
+B(10,0.3,7.6,M(0x0a6a8f,{roughness:0.5}),0,0.55,0,ard);
+B(2.4,1.5,2.2,SILVER,-4.2,1.35,-1.6,ard);
+B(1.8,1.2,2.0,BLACK,-4.4,1.2,2.4,ard);
+B(3.4,0.35,1.0,BLACK,1.2,0.88,0.4,ard);
+B(3.4,0.06,0.1,SILVER,1.2,0.78,-0.15,ard);
+B(3.4,0.06,0.1,SILVER,1.2,0.78,0.95,ard);
+B(0.7,0.25,0.35,SILVER,3.6,0.82,0.2,ard);
+B(0.6,0.3,0.6,SILVER,-2.7,0.85,-2.2,ard);
+C(0.18,0.2,M(0xc0392b),-2.7,1.05,-2.2,ard);
+B(0.25,0.12,0.25,M(0x37c25a,{emissive:0x37c25a,emissiveIntensity:0.9}),3.0,0.76,1.7,ard);
+B(0.25,0.12,0.25,M(0xe8a33a,{emissive:0xe8a33a,emissiveIntensity:0.3}),3.0,0.76,2.2,ard);
+B(4.0,0.8,0.28,BLACK,2.65,0.95,-3.4,ard);
+B(5.0,0.8,0.28,BLACK,-2.25,0.95,-3.4,ard);
+B(4.0,0.8,0.28,BLACK,-0.85,0.95,3.4,ard);
+B(3.0,0.8,0.28,BLACK,2.45,0.95,3.4,ard);
+const dpin=n=>V(4.4-n*0.5-(n>=8?0.4:0),1.45,-3.4);
+const apin=i=>V(1.2+i*0.5,1.45,3.4);
+const pwr=i=>V(-2.6+i*0.5,1.45,3.4);
+const pinTipGeo=new THREE.BoxGeometry(0.12,0.3,0.12);
+const tips=[];
+for(let n=0;n<=7;n++)tips.push(dpin(n));
+for(let n=8;n<=13;n++)tips.push(dpin(n));
+for(let k=0;k<4;k++)tips.push(V(0-0.5*(k+1)-0.0,1.45,-3.4));
+for(let i=0;i<8;i++)tips.push(pwr(i));
+for(let i=0;i<6;i++)tips.push(apin(i));
+tips.forEach(p=>{const t=new THREE.Mesh(pinTipGeo,GOLD);t.position.copy(p);t.position.y=1.5;ard.add(t);});
+label('Arduino Uno R3',ard,0,3.6,0,'#4aa3d8',4.6);
+
+/* ---------- Breadboard ---------- */
+const bb=part('Breadboard','Solderless breadboard. The red and black rails along the front edge carry 5 V and ground to every part. Components in the same column strip are connected.',4.5,0,-4,8.8,0);
+B(15,1,9,M(0xe7e3d6,{roughness:0.8}),0,0.5,0,bb);
+B(15,0.02,0.55,M(0xb9b4a4),0,1.011,0,bb);
+B(15,0.02,0.06,M(0xd33b3b),0,1.012,3.35,bb);
+B(15,0.02,0.06,M(0x2f6fd0),0,1.012,4.35,bb);
+B(15,0.02,0.06,M(0xd33b3b),0,1.012,-3.85,bb);
+B(15,0.02,0.06,M(0x2f6fd0),0,1.012,-4.35,bb);
+(function(){
+  const rows=[];
+  for(let r=0;r<5;r++){rows.push(0.6+r*0.5);rows.push(-0.6-r*0.5);}
+  rows.push(3.6,4.1,-3.6,-4.1);
+  const n=28;
+  const inst=new THREE.InstancedMesh(new THREE.BoxGeometry(0.16,0.04,0.16),M(0x23262d),n*rows.length);
+  const d=new THREE.Object3D();let k=0;
+  rows.forEach(z=>{for(let i=0;i<n;i++){d.position.set(-6.75+i*0.5,1.02,z);d.updateMatrix();inst.setMatrixAt(k++,d.matrix);}});
+  bb.add(inst);
+})();
+const bbp=(lx,lz)=>A(bb,lx,1.03,lz);
+label('Breadboard',bb,-4.5,1.9,-4.2,'#8d8a7f',4);
+
+/* ---------- LEDs and resistors ---------- */
+function led(name,info,color,hex,lx){
+  const g=part(name,info,4.5+lx,1.0,-4+1.6,1.3,5.5);
+  const m=M(color,{transparent:true,opacity:0.88,emissive:color,emissiveIntensity:0.05,roughness:0.25});
+  C(0.04,0.8,SILVER,-0.25,0.4,0,g,8);C(0.04,0.95,SILVER,0.25,0.47,0,g,8);
+  C(0.5,0.1,m,0,0.74,0,g,20);
+  C(0.42,0.6,m,0,1.0,0,g,20);
+  const dome=S(0.42,m,0,1.3,0,g);dome.scale.y=0.9;
+  const light=new THREE.PointLight(color,0,6);light.position.set(0,1.9,0);g.add(light);
+  return {g:g,mat:m,light:light};
+}
+const LG=led('Green LED','Green LED on D4 through a 220 ohm resistor. It is on while your posture is good.',0x39d353,'g',-5.0);
+const LY=led('Yellow LED','Yellow LED on D5 through a 220 ohm resistor. It turns on as the warning after you stay above 15 degrees for 2 seconds.',0xffc21a,'y',-3.0);
+const LR=led('Red LED','Red LED on D6 through a 220 ohm resistor. It turns on, together with the vibration motor, after 5 seconds of warning.',0xff3b30,'r',-1.0);
+label('Green',LG.g,0,2.5,0,'#39d353',2.6);
+label('Yellow',LY.g,0,2.5,0,'#ffc21a',2.6);
+label('Red',LR.g,0,2.5,0,'#ff3b30',2.6);
+
+function resistor(name,info,lx,z1,z2,bands,ex){
+  const g=part(name,info,4.5+lx,1.0,-4+(z1+z2)/2,1.2,ex||3.5);
+  const len=z2-z1;
+  const bodyM=M(0xd9c8a0,{roughness:0.7});
+  const lead=mesh(new THREE.CylinderGeometry(0.04,0.04,len,8),SILVER,0,0.45,0,g);lead.rotation.x=Math.PI/2;
+  const body=mesh(new THREE.CylinderGeometry(0.22,0.22,1.0,16),bodyM,0,0.45,0,g);body.rotation.x=Math.PI/2;
+  const offs=[-0.33,-0.12,0.1,0.38];
+  bands.forEach((c,i)=>{const b=mesh(new THREE.CylinderGeometry(0.228,0.228,0.07,16),M(c),0,0.45,offs[i],g);b.rotation.x=Math.PI/2;});
+  C(0.04,0.45,SILVER,0,0.225,-len/2,g,8);
+  C(0.04,0.45,SILVER,0,0.225,len/2,g,8);
+  g.userData.len=len;
+  return g;
+}
+const RED=0xcc2a2a,BRN=0x6b3a1a,GLD=0xd4af37,BLK=0x111111;
+const R220=[RED,RED,BRN,GLD];
+const rG=resistor('220 ohm resistor','220 ohm resistor (red, red, brown). It limits the green LED current to roughly 10 mA, which protects both the LED and the Arduino pin.',-4.75,-2.1,0.6,R220);
+const rY=resistor('220 ohm resistor','220 ohm resistor (red, red, brown) for the yellow LED. It limits the LED current to roughly 10 mA.',-2.75,-2.1,0.6,R220);
+const rR=resistor('220 ohm resistor','220 ohm resistor (red, red, brown) for the red LED. It limits the LED current to roughly 10 mA.',-0.75,-2.1,0.6,R220);
+const rB=resistor('1 kilohm resistor','1 kilohm resistor (brown, black, red) between D7 and the transistor base. It limits the base current so the Arduino pin stays safe.',2.75,-2.1,0.6,[BRN,BLK,RED,GLD]);
+[rG,rY,rR,rB].forEach((r,i)=>label(i<3?'220 ohm':'1 kilohm',r,0,1.5,0,'#c9b27a',2.6));
+
+/* ---------- Transistor ---------- */
+const tr=part('2N2222 transistor','NPN transistor used as a switch. D7 drives the base through 1 kilohm. The motor current flows through the collector to ground, so the Arduino pin never carries it.',4.5+2.75,1.0,-4+1.6,1.3,6);
+(function(){
+  const m=new THREE.MeshStandardMaterial({color:0x111214,roughness:0.5,side:THREE.DoubleSide});
+  const half=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,0.9,20,1,false,0,Math.PI),m);
+  half.position.set(0,1.15,0);half.rotation.y=Math.PI/2;half.castShadow=true;tr.add(half);
+  const flat=new THREE.Mesh(new THREE.PlaneGeometry(1.0,0.9),m);flat.position.set(0,1.15,0);tr.add(flat);
+  [-0.5,0,0.5].forEach(x=>C(0.04,0.75,SILVER,x,0.37,0,tr,8));
+})();
+label('2N2222',tr,0,2.3,0,'#9aa3b2',2.8);
+
+/* ---------- Diode ---------- */
+const di=part('1N4007 diode','Flyback diode across the motor, stripe toward 5 V. It absorbs the voltage spike when the motor switches off, which protects the transistor.',4.5+3.25,1.0,-4+3.1,1.0,4.5);
+(function(){
+  const lead=mesh(new THREE.CylinderGeometry(0.04,0.04,1.0,8),SILVER,0,0.4,0,di);lead.rotation.x=Math.PI/2;
+  const body=mesh(new THREE.CylinderGeometry(0.26,0.26,0.7,16),BLACK,0,0.4,0,di);body.rotation.x=Math.PI/2;
+  const band=mesh(new THREE.CylinderGeometry(0.265,0.265,0.12,16),M(0xd8dbe0),0,0.4,0.24,di);band.rotation.x=Math.PI/2;
+  C(0.04,0.4,SILVER,0,0.2,-0.5,di,8);C(0.04,0.4,SILVER,0,0.2,0.5,di,8);
+})();
+label('1N4007',di,1.4,1.5,0,'#9aa3b2',2.8);
+
+/* ---------- MPU6050 on a tilting stand ---------- */
+const mpu=part('MPU6050 gyro and accelerometer','Three-axis gyroscope plus three-axis accelerometer on one chip. Worn on the upper back, it measures forward lean. Wires: VCC to 5 V, GND to ground, SDA to A4, SCL to A5. Move the tilt slider to rotate it.',-14,0,6,4.2,3);
+B(4.6,0.3,2.6,M(0x2b2f38),0,0.15,0,mpu);
+B(0.3,1.0,0.5,M(0x3a404c),-1.9,0.8,0,mpu);
+B(0.3,1.0,0.5,M(0x3a404c),1.9,0.8,0,mpu);
+const pivot=new THREE.Group();pivot.position.set(0,1.1,0);mpu.add(pivot);
+const axle=mesh(new THREE.CylinderGeometry(0.13,0.13,3.8,12),SILVER,0,0,0,pivot);axle.rotation.z=Math.PI/2;
+C(0.12,3.0,M(0x9aa0a6),0,1.5,0,pivot,12);
+B(2.4,1.8,0.12,M(0x6b3fa0,{roughness:0.45}),0,3.3,0.15,pivot);
+B(0.55,0.5,0.1,BLACK,0.2,3.45,0.26,pivot);
+B(0.3,0.15,0.1,M(0xd8dbe0),-0.6,3.6,0.26,pivot);
+B(1.4,0.22,0.22,BLACK,0,2.5,0.2,pivot);
+for(let i=0;i<4;i++)B(0.1,0.25,0.1,GOLD,-0.45+i*0.3,2.35,0.2,pivot);
+[[V(1,0,0),0xe24b4a],[V(0,1,0),0x62c14a],[V(0,0,1),0x3b8de0]].forEach(a=>{pivot.add(new THREE.ArrowHelper(a[0],V(0,3.3,0.22),1.7,a[1],0.35,0.2));});
+(function(){
+  const pts=[];
+  for(let d=0;d<=50;d+=2){const r=THREE.MathUtils.degToRad(d);pts.push(V(2.3,1.1+4.2*Math.cos(r),4.2*Math.sin(r)));}
+  mpu.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:0x8a93a3})));
+  mpu.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([V(2.3,1.1,0),V(2.3,5.6,0)]),new THREE.LineBasicMaterial({color:0x55606f})));
+  const r15=THREE.MathUtils.degToRad(15);
+  mpu.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([V(2.3,1.1+3.7*Math.cos(r15),3.7*Math.sin(r15)),V(2.3,1.1+4.7*Math.cos(r15),4.7*Math.sin(r15))]),new THREE.LineBasicMaterial({color:0xffc21a})));
+})();
+label('15 deg limit',mpu,2.3,6.3,1.8,'#ffc21a',3.4);
+label('MPU6050',mpu,0,6.4,0,'#a98be0',3.2);
+const mpuPin=i=>()=>pivot.localToWorld(V(-0.45+i*0.3,2.35,0.2));
+
+/* ---------- HC-05 ---------- */
+const hc=part('HC-05 Bluetooth module','Sends the angle and posture state to the PostureIt phone app as lines like 12.4,G. TX goes to D10. RX goes to D11 through a 1 kilohm and 2 kilohm divider (5 V down to 3.3 V); the divider is not drawn here.',-11,0,-11.5,3,3);
+B(4.2,0.2,1.9,M(0x1b4f8a),0,0.35,0,hc);
+B(1.6,0.25,1.2,SILVER,-0.7,0.55,-0.1,hc);
+B(0.5,0.15,0.5,BLACK,0.9,0.5,-0.1,hc);
+B(3.0,0.3,0.25,BLACK,0,0.55,0.8,hc);
+for(let i=0;i<6;i++)B(0.1,0.3,0.1,GOLD,-1.25+i*0.5,0.8,0.8,hc);
+const hcLed=M(0xff3b30,{emissive:0xff3b30,emissiveIntensity:0.5});
+B(0.25,0.12,0.25,hcLed,1.6,0.5,-0.5,hc);
+label('HC-05',hc,0,2.2,0,'#4aa3d8',2.8);
+const hcPin=i=>A(hc,-1.25+i*0.5,0.95,0.8);
+
+/* ---------- Power: battery, switch, boost ---------- */
+const bat=part('3.7 V LiPo battery','Powers the wearable. The final build also needs a charging module (TP4056). The positive lead goes through the switch to the boost converter.',3,0,7.5,3,3.5);
+B(5,0.7,3.2,M(0x2f6fb5,{roughness:0.5}),0,0.4,0,bat);
+B(2.4,0.02,1.6,M(0xe9e7e0),0,0.76,0,bat);
+B(0.3,0.25,0.5,M(0xd33b3b),-2.7,0.45,-0.7,bat);
+B(0.3,0.25,0.5,M(0x222222),-2.7,0.45,0.7,bat);
+label('3.7 V LiPo',bat,0,2.0,0,'#5d8fd6',3.4);
+const sw=part('Power switch','Slide switch between the battery and the boost converter. Slide it to turn the wearable on and off.',-3,0,7.5,1.6,3.5);
+B(2.2,0.6,1.1,BLACK,0,0.3,0,sw);
+B(0.7,0.5,0.7,M(0xe0e0e0),0.3,0.75,0,sw);
+B(0.3,0.2,0.3,GOLD,-1.2,0.5,0,sw);B(0.3,0.2,0.3,GOLD,1.2,0.5,0,sw);
+label('Switch',sw,0,1.9,0,'#c8c8c8',2.4);
+const bo=part('5 V boost converter','Raises the 3.7 V battery voltage to a steady 5 V for the Arduino, sensor and motor. Its output goes to the Arduino 5 V and GND pins.',-7.5,0,7.5,2,3.5);
+B(3.0,0.2,1.8,M(0x1f6fd0),0,0.35,0,bo);
+B(0.9,0.55,0.9,BLACK,-0.4,0.75,0,bo);
+C(0.35,0.7,M(0x9a9fa8),0.7,0.8,0.3,bo);
+B(0.5,0.35,0.5,M(0x2255aa),0.8,0.62,-0.5,bo);
+B(0.3,0.2,0.3,GOLD,-1.4,0.55,-0.5,bo);B(0.3,0.2,0.3,GOLD,-1.4,0.55,0.5,bo);
+B(0.3,0.2,0.3,GOLD,1.4,0.55,-0.5,bo);B(0.3,0.2,0.3,GOLD,1.4,0.55,0.5,bo);
+label('5 V boost',bo,0,2.0,0,'#5d8fd6',3.2);
+
+/* ---------- Vibration motor ---------- */
+const mo=part('Vibration motor','Coin vibration motor. It pulses 400 ms on and 400 ms off while the red alert is active, so you feel the warning on your back.',12.5,0,5,2.2,4);
+const shaker=new THREE.Group();mo.add(shaker);
+C(1.0,0.45,M(0xb7bcc3,{metalness:0.6,roughness:0.35}),0,0.4,0,shaker,32);
+C(0.75,0.06,M(0x8f959e),0,0.65,0,shaker,32);
+const spin=new THREE.Group();spin.position.set(0,0.75,0);shaker.add(spin);
+B(0.5,0.3,0.7,M(0xc0833a),0.35,0.1,0,spin);
+const ringM1=new THREE.MeshBasicMaterial({color:0xff3b30,transparent:true,opacity:0});
+const ringM2=new THREE.MeshBasicMaterial({color:0xff3b30,transparent:true,opacity:0});
+const ring1=new THREE.Mesh(new THREE.TorusGeometry(1.2,0.04,8,40),ringM1);ring1.rotation.x=Math.PI/2;ring1.position.y=0.5;mo.add(ring1);
+const ring2=new THREE.Mesh(new THREE.TorusGeometry(1.2,0.04,8,40),ringM2);ring2.rotation.x=Math.PI/2;ring2.position.y=0.5;mo.add(ring2);
+label('Vibration motor',mo,0,2.4,0,'#d98a3a',4.2);
+mo.userData.shaker=shaker;
+
+/* ---------- Wires ---------- */
+let showWires=true;
+const wires=[];
+function wire(a,b,color,lift,r){
+  wires.push({a:a,b:b,lift:(lift==null?1.5:lift),r:r||0.07,mat:new THREE.MeshStandardMaterial({color:color,roughness:0.5}),mesh:null});
+}
+function rebuildWires(){
+  scene.updateMatrixWorld(true);
+  wires.forEach(w=>{
+    const p1=w.a(),p2=w.b();
+    const up=V(0,0.5,0);
+    const mid=p1.clone().lerp(p2,0.5);mid.y=Math.max(p1.y,p2.y)+w.lift;
+    const curve=new THREE.CatmullRomCurve3([p1,p1.clone().add(up),mid,p2.clone().add(up),p2]);
+    const geo=new THREE.TubeGeometry(curve,28,w.r,6,false);
+    if(w.mesh){w.mesh.geometry.dispose();w.mesh.geometry=geo;}
+    else{w.mesh=new THREE.Mesh(geo,w.mat);w.mesh.castShadow=true;scene.add(w.mesh);}
+    w.mesh.visible=showWires;
+  });
+}
+const cRED=0xd62d2d,cBLK=0x0d0d0f,cGRN=0x2fbf4a,cYEL=0xf2c230,cORG=0xe8803a,cWHT=0xf0f0f0,cBLU=0x3a7bd5,cPUR=0x9a5bd5,cGRY=0x9aa0a6,cBRW=0x8a5a2b,cTEL=0x20b2aa;
+const ardP=(v)=>()=>ard.localToWorld(v.clone());
+const ard5V=pwr(4),ardG1=pwr(5),ardG2=pwr(6);
+
+wire(ardP(dpin(4)),A(rG,0,0.02,-rG.userData.len/2),cGRN,1.2);
+wire(ardP(dpin(5)),A(rY,0,0.02,-rY.userData.len/2),cYEL,1.4);
+wire(ardP(dpin(6)),A(rR,0,0.02,-rR.userData.len/2),cORG,1.6);
+wire(ardP(dpin(7)),A(rB,0,0.02,-rB.userData.len/2),cWHT,1.8);
+
+wire(ardP(ard5V),bbp(-6.25,3.6),cRED,1.0);
+wire(ardP(ardG1),bbp(-5.75,4.1),cBLK,0.8);
+
+wire(mpuPin(0),bbp(-4.25,3.6),cRED,2.4);
+wire(mpuPin(1),bbp(-3.75,4.1),cBLK,2.6);
+wire(mpuPin(3),ardP(apin(4)),cBLU,2.8);
+wire(mpuPin(2),ardP(apin(5)),cPUR,3.0);
+
+wire(hcPin(3),ardP(dpin(10)),cGRY,2.0);
+wire(hcPin(4),ardP(dpin(11)),cBRW,2.4);
+wire(hcPin(1),bbp(-6.25,-4.1),cRED,2.8);
+wire(hcPin(2),bbp(-5.75,-3.6),cBLK,3.0);
+wire(bbp(6.75,-4.1),bbp(6.75,3.6),cRED,1.2);
+wire(bbp(6.25,-3.6),bbp(6.25,4.1),cBLK,1.2);
+
+[[-5.25,LG],[-3.25,LY],[-1.25,LR]].forEach(p=>wire(bbp(p[0],2.1),bbp(p[0],4.1),cBLK,0.5,0.06));
+wire(bbp(2.25,2.1),bbp(2.25,4.1),cBLK,0.5,0.06);
+wire(bbp(3.25,1.1),A(mo,-0.6,0.5,-0.6),cTEL,1.8);
+wire(A(mo,0.6,0.5,-0.6),bbp(5.25,3.6),cRED,1.6);
+
+wire(A(bat,-2.7,0.6,-0.7),A(sw,1.2,0.6,0),cRED,1.0);
+wire(A(sw,-1.2,0.6,0),A(bo,1.4,0.65,-0.5),cRED,1.0);
+wire(A(bat,-2.7,0.6,0.7),A(bo,1.4,0.65,0.5),cBLK,1.4);
+wire(A(bo,-1.4,0.65,-0.5),ardP(ard5V),cRED,2.0);
+wire(A(bo,-1.4,0.65,0.5),ardP(ardG2),cBLK,2.2);
+
+/* ---------- Selection ring ---------- */
+const sel=new THREE.Mesh(new THREE.RingGeometry(1.0,1.12,48),new THREE.MeshBasicMaterial({color:0xf2c230,side:THREE.DoubleSide,transparent:true,opacity:0.9}));
+sel.rotation.x=-Math.PI/2;sel.position.y=0.04;sel.visible=false;scene.add(sel);
+
+const pickables=[];
+parts.forEach(p=>p.traverse(o=>{if(o.isMesh&&!o.isInstancedMesh)pickables.push(o);}));
+const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();
+let dx=0,dy=0;
+canvas.addEventListener('pointerdown',e=>{dx=e.clientX;dy=e.clientY;});
+canvas.addEventListener('pointerup',e=>{
+  if(Math.hypot(e.clientX-dx,e.clientY-dy)>6)return;
+  const r=canvas.getBoundingClientRect();
+  mouse.set(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);
+  ray.setFromCamera(mouse,camera);
+  const hits=ray.intersectObjects(pickables,false);
+  if(!hits.length){sel.visible=false;return;}
+  let o=hits[0].object;
+  while(o&&!(o.userData&&o.userData.info))o=o.parent;
+  if(!o)return;
+  $('iname').textContent=o.userData.name;
+  $('itext').textContent=o.userData.info;
+  const w=o.getWorldPosition(V(0,0,0));
+  const rr=o.userData.r;
+  sel.scale.set(rr,rr,1);sel.position.x=w.x;sel.position.z=w.z;sel.visible=true;
+});
+
+/* ---------- State machine (mirrors the Arduino sketch) ---------- */
+const THRESH=15,RESET=13,HOLD=2,WARN=5;
+let st='G',since=0,vibeOn=false,vibeT=0,tilt=0,target=0;
+function stepState(a,dt){
+  since+=dt;
+  if(st==='G'){if(a>THRESH){st='H';since=0;}}
+  else if(st==='H'){if(a<=THRESH){st='G';since=0;}else if(since>=HOLD){st='W';since=0;}}
+  else if(st==='W'){if(a<=RESET){st='G';since=0;}else if(since>=WARN){st='A';since=0;}}
+  else if(st==='A'){if(a<=RESET){st='G';since=0;}}
+  if(st==='A'){vibeT+=dt;if(vibeT>=0.4){vibeOn=!vibeOn;vibeT=0;}}else{vibeOn=false;vibeT=0;}
+}
+
+/* ---------- UI ---------- */
+const slider=$('tilt');
+let demo=false,demoT=0,exploded=false,exT=0;
+slider.addEventListener('input',()=>{if(demo){demo=false;$('bDemo').classList.remove('on');}target=+slider.value;});
+function toggle(id,fn){const b=$(id);b.addEventListener('click',()=>fn(b));}
+toggle('bDemo',b=>{demo=!demo;demoT=0;b.classList.toggle('on',demo);});
+toggle('bLabels',b=>{b.classList.toggle('on');const v=b.classList.contains('on');labels.forEach(l=>l.visible=v);});
+toggle('bWires',b=>{b.classList.toggle('on');showWires=b.classList.contains('on');wires.forEach(w=>{if(w.mesh)w.mesh.visible=showWires;});});
+toggle('bExplode',b=>{exploded=!exploded;b.classList.toggle('on',exploded);});
+toggle('bSpin',b=>{b.classList.toggle('on');controls.autoRotate=b.classList.contains('on');controls.autoRotateSpeed=1.2;});
+toggle('bReset',()=>{placeCamera();});
+
+function placeCamera(){
+  const a=camera.aspect;
+  const dist=a<1?36/a*0.8:36;
+  camera.position.set(0,0.66*dist,0.8*dist);
+  controls.target.set(0,0,0);
+  controls.update();
+}
+function resize(){
+  const w=window.innerWidth,h=window.innerHeight;
+  renderer.setSize(w,h,false);
+  camera.aspect=w/h;camera.updateProjectionMatrix();
+}
+window.addEventListener('resize',resize);
+resize();placeCamera();
+rebuildWires();
+
+/* ---------- Loop ---------- */
+const clock=new THREE.Clock();
+let lastTilt=-1,serialT=0,spinV=0;
+const stName={G:'Good',H:'Good',W:'Warning',A:'Alert'};
+function frame(){
+  requestAnimationFrame(frame);
+  const dt=Math.min(clock.getDelta(),0.05),t=clock.elapsedTime;
+
+  if(demo){
+    demoT+=dt;const c=demoT%19;
+    let v;
+    if(c<3)v=3;else if(c<5)v=3+(c-3)/2*25;else if(c<15)v=28;else if(c<17)v=28-(c-15)/2*24;else v=4;
+    target=v;slider.value=Math.round(v);
+  }
+  tilt+=(target-tilt)*Math.min(1,dt*6);
+  stepState(tilt,dt);
+  pivot.rotation.x=THREE.MathUtils.degToRad(tilt);
+
+  let dirty=Math.abs(tilt-lastTilt)>0.01;lastTilt=tilt;
+  const exT2=exploded?1:0;
+  if(exT!==exT2){
+    exT+=(exT2-exT)*Math.min(1,dt*5);
+    if(Math.abs(exT2-exT)<0.002)exT=exT2;
+    parts.forEach(p=>{p.position.y=p.userData.baseY+p.userData.ex*exT;});
+    dirty=true;
+  }
+  if(dirty)rebuildWires();
+
+  const gOn=(st==='G'||st==='H'),yOn=st==='W',rOn=st==='A';
+  LG.mat.emissiveIntensity=gOn?1.8:0.05;LG.light.intensity=gOn?1.4:0;
+  LY.mat.emissiveIntensity=yOn?1.8:0.05;LY.light.intensity=yOn?1.4:0;
+  LR.mat.emissiveIntensity=rOn?1.8:0.05;LR.light.intensity=rOn?1.4:0;
+  hcLed.emissiveIntensity=Math.sin(t*8)>0?1.2:0.1;
+
+  const target2=vibeOn?55:0;
+  spinV+=(target2-spinV)*Math.min(1,dt*10);
+  spin.rotation.y+=spinV*dt;
+  if(vibeOn){
+    shaker.position.set((Math.random()-0.5)*0.14,0,(Math.random()-0.5)*0.14);
+    const p1=(t*3)%1,p2=(t*3+0.5)%1;
+    ring1.scale.setScalar(1+p1);ringM1.opacity=0.8*(1-p1);
+    ring2.scale.setScalar(1+p2);ringM2.opacity=0.8*(1-p2);
+  }else{
+    shaker.position.set(0,0,0);ringM1.opacity=0;ringM2.opacity=0;
+  }
+
+  $('hg').style.opacity=gOn?1:0.18;
+  $('hy').style.opacity=yOn?1:0.18;
+  $('hr').style.opacity=rOn?1:0.18;
+  $('hstate').textContent=stName[st];
+  $('hang').textContent=tilt.toFixed(1);
+  $('hsince').textContent=since.toFixed(1);
+  $('tiltv').textContent=Math.round(tilt)+'°';
+  serialT+=dt;
+  if(serialT>=0.2){serialT=0;$('hser').textContent=tilt.toFixed(1)+','+(st==='W'?'W':st==='A'?'A':'G');}
+
+  controls.update();
+  renderer.render(scene,camera);
+}
+frame();
+})();
+</script>
+</body>
+</html>
